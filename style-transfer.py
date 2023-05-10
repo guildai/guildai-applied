@@ -1,10 +1,5 @@
-# import resources
-# %matplotlib inline
-
 from PIL import Image
 from io import BytesIO
-# import matplotlib.pyplot as plt
-# from matplotlib import cm
 import numpy as np
 
 import torch
@@ -12,19 +7,17 @@ import torch.optim as optim
 import requests
 from torchvision import transforms, models
 
-# get the "features" portion of VGG19 (we will not need the "classifier" portion)
-vgg = models.vgg19(pretrained=True).features
+def _get_vgg19_features():
+    return models.vgg19(pretrained=True).features
 
-# freeze all VGG parameters since we're only optimizing the target image
-for param in vgg.parameters():
-    param.requires_grad_(False)
+def _freeze_vgg_parameters(vgg):
+    for param in vgg.parameters():
+        param.requires_grad_(False)
 
-# move the model to GPU, if available
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def _try_use_gpu_as_torch_device():
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-vgg.to(device)
-
-def load_image(img_path, max_size=400, shape=None):
+def _load_image(img_path, max_size=400, shape=None):
     ''' Load in and transform an image, making sure the image
        is <= 400 pixels in the x-y dims.'''
     if "http" in img_path:
@@ -48,26 +41,11 @@ def load_image(img_path, max_size=400, shape=None):
                         transforms.Normalize((0.485, 0.456, 0.406), 
                                              (0.229, 0.224, 0.225))])
 
-    # discard the transparent, alpha channel (that's the :3) and add the batch dimension
+    # discard the alpha channel, add the batch dimension
     image = in_transform(image)[:3,:,:].unsqueeze(0)
     return image
 
-# load in content and style image
-content_path = 'https://vignette.wikia.nocookie.net/lovecraft/images/c/cf/Screenshot_20171018-093500.jpg/revision/latest?cb=20171020174137'
-content = load_image(
-    content_path,
-).to(device)
-
-# Resize style to match content, makes code easier
-style_path = 'https://d3d00swyhr67nd.cloudfront.net/w800h800/collection/SRY/RHU/SRY_RHU_THC0021-001.jpg'
-style = load_image(
-    style_path,
-    shape=content.shape[-2:],
-).to(device)
-
-# helper function for un-normalizing an image 
-# and converting it from a Tensor image to a NumPy image for display
-def im_convert(tensor):
+def _torch_tensor_to_np_image(tensor):
     """ Display a tensor as an image. """
     
     image = tensor.to("cpu").clone().detach()
@@ -78,22 +56,20 @@ def im_convert(tensor):
 
     return image
 
-# display the images
-# fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
-# content and style ims side-by-side
-# ax1.imshow(im_convert(content))
-# ax2.imshow(im_convert(style))
+def _img_from_np_array(array):
+    return Image.fromarray(
+        np.uint8(array*255),
+        "RGB",
+    )
 
-# print out VGG19 structure so you can see the names of various layers
-print(vgg)
+def _get_copy_of_content_image(content, device):
+    return content.clone().requires_grad_(True).to(device)
 
-def get_features(image, model, layers=None):
+def _get_features(image, model, layers=None):
     """ Run an image forward through a model and get the features for 
         a set of layers. Default layers are for VGGNet matching Gatys et al (2016)
     """
     
-    ## TODO: Complete mapping layer names of PyTorch's VGGNet to names from the paper
-    ## Need the layers for the content and style representations of an image
     if layers is None:
         layers = {'0': 'conv1_1',
                   '5': 'conv2_1', 
@@ -103,10 +79,8 @@ def get_features(image, model, layers=None):
                   '28': 'conv5_1'}
         
         
-    ## -- do not need to change the code below this line -- ##
     features = {}
     x = image
-    # model._modules is a dictionary holding each module in the model
     for name, layer in model._modules.items():
         x = layer(x)
         if name in layers:
@@ -114,37 +88,77 @@ def get_features(image, model, layers=None):
             
     return features
 
-def gram_matrix(tensor):
+def _gram_matrix(tensor):
     """ Calculate the Gram Matrix of a given tensor 
         Gram Matrix: https://en.wikipedia.org/wiki/Gramian_matrix
     """
     
-    ## get the batch_size, depth, height, and width of the Tensor
-    _, d, h, w = tensor.size()
+    _, depth, height, width = tensor.size()
     ## reshape it, so we're multiplying the features for each channel
-    tensor = tensor.view(d, h * w)
+    tensor = tensor.view(depth, height * width)
     ## calculate the gram matrix    
     gram = torch.mm(tensor, tensor.t())
     
     return gram
 
-# get content and style features only once before forming the target image
-content_features = get_features(content, vgg)
-style_features = get_features(style, vgg)
+def _style_grams(style_features):
+    return {
+        layer: _gram_matrix(style_features[layer])
+        for layer in style_features
+    }
 
-# calculate the gram matrices for each layer of our style representation
-style_grams = {
-    layer: gram_matrix(style_features[layer]) for layer in style_features
-}
+def _update_target_image(optimizer, total_loss):
+    optimizer.zero_grad()
+    total_loss.backward()
+    optimizer.step()
 
-# create a third "target" image and prep it for change
-# it is a good idea to start off with the target as a copy of our *content* image
-# then iteratively change its style
-target = content.clone().requires_grad_(True).to(device)
+def _content_loss(target_features, content_features):
+    return torch.mean((target_features['conv4_2'] - content_features['conv4_2'])**2)
 
-# weights for each style layer 
-# weighting earlier layers more will result in *larger* style artifacts
-# notice we are excluding `conv4_2` our content representation
+def _layer_loss(target_gram, layer_gram, layer_weight, target_feature):
+    _, depth, height, width = target_feature.shape
+    return layer_weight * torch.mean((target_gram - layer_gram)**2) / (depth * height * width)
+
+def _style_loss(style_weights, target_features, style_grams):
+    style_loss = 0
+    for layer in style_weights:
+        target_feature = target_features[layer]
+        target_gram = _gram_matrix(target_feature)
+        layer_gram = style_grams[layer]
+        layer_weight = style_weights[layer]
+        style_loss += _layer_loss(layer_weight, target_gram, layer_gram)
+    return style_loss
+
+def _show_loss(total_loss, i=0, show_loss_every=1):
+    loss = total_loss.item()
+    if  i % show_loss_every == 0:
+        print(f'step: {i}')
+        print(f'loss: {loss}')
+show_loss_every = 400
+
+content_weight = 1  # alpha
+style_weight = 1e6  # beta
+
+vgg = _get_vgg19_features()
+_freeze_vgg_parameters(vgg)
+device = _try_use_gpu_as_torch_device()
+vgg.to(device)
+print(vgg)
+
+content_path = 'https://vignette.wikia.nocookie.net/lovecraft/images/c/cf/Screenshot_20171018-093500.jpg'
+content = _load_image(content_path).to(device)
+
+style_path = 'https://d3d00swyhr67nd.cloudfront.net/w800h800/collection/SRY/RHU/SRY_RHU_THC0021-001.jpg'
+style = _load_image(style_path, shape=content.shape[-2:]).to(device)
+
+target = _get_copy_of_content_image(content, device)
+
+content_features = _get_features(content, vgg)
+style_features = _get_features(style, vgg)
+style_grams = _style_grams(style_features)
+
+# weighting earlier layers more will result in larger style artifacts
+# `conv4_2` is excluded from the content style representation
 conv1_1 = 1.0
 conv2_1 = 0.8
 conv3_1 = 0.5
@@ -158,74 +172,25 @@ style_weights = {
     'conv5_1': conv5_1,
 }
 
-# you may choose to leave these as is
-content_weight = 1  # alpha
-style_weight = 1e6  # beta
-
-# for displaying the target image, intermittently
-show_every = 400
-
-# iteration hyperparameters
 learning_rate = 0.003
 optimizer = optim.Adam(
     [target],
     lr=learning_rate,
 )
-steps = 5000  # decide how many iterations to update your image (5000)
 
-min_loss = float("inf")
-for ii in range(1, steps+1):
-    # get the features target image and calculate the content loss
-    target_features = get_features(target, vgg)
-    content_loss = torch.mean((target_features['conv4_2'] - content_features['conv4_2'])**2)
-    
-    # the style loss, initialized to 0
-    style_loss = 0
-    # iterate through each style layer and add to the style loss
-    for layer in style_weights:
-        # get the "target" style representation for the layer
-        target_feature = target_features[layer]
-        _, d, h, w = target_feature.shape
-        
-        # calculate the target gram matrix
-        target_gram = gram_matrix(target_feature)
-        
-        # get the "style" style representation
-        style_gram = style_grams[layer]
-        # calculate the style loss for one layer, weighted appropriately
-        layer_style_loss = style_weights[layer] * torch.mean((target_gram - style_gram)**2)
-        
-        # add to the style loss
-        style_loss += layer_style_loss / (d * h * w)
-        
-        
-    # calculate the *total* loss
+steps = 5000
+for i in range(steps):
+    target_features = _get_features(target, vgg)
+    content_loss = _content_loss(target_features, content_features)
+    style_loss = _style_loss(style_weights, target_features, style_grams)
     total_loss = content_weight * content_loss + style_weight * style_loss
-    
-    ## -- do not need to change code, below -- ##
-    # update your target image
-    optimizer.zero_grad()
-    total_loss.backward()
-    optimizer.step()
-    
-    min_loss = min(min_loss, total_loss.item())
-    # display intermediate images and print the loss
-    if  ii % show_every == 0:
-        print(f'step: {ii}')
-        print(f'loss: {min_loss}')
-        # plt.imshow(im_convert(target))
-        # plt.show()
-print(f'step: {steps}')
-print(f'loss: {min_loss}')
 
-def img_from_np(array):
-    return Image.fromarray(
-        np.uint8(array*255),
-        "RGB",
-    )
+    _update_target_image(optimizer, total_loss)
+    _show_loss(total_loss, i+1, show_loss_every)
+_show_loss(total_loss)
 
-initial_img = img_from_np(im_convert(content))
+initial_img = _img_from_np_array(_torch_tensor_to_np_image(content))
 initial_img.save("initial_img.png")
 
-final_img = img_from_np(im_convert(target))
+final_img = _img_from_np_array(_torch_tensor_to_np_image(target))
 final_img.save("final_img.png")
