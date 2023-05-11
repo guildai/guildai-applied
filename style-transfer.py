@@ -115,7 +115,7 @@ def _update_target_image(optimizer, total_loss):
 def _content_loss(target_features, content_features):
     return torch.mean((target_features['conv4_2'] - content_features['conv4_2'])**2)
 
-def _layer_loss(target_gram, layer_gram, layer_weight, target_feature):
+def _layer_loss(layer_weight, target_gram, layer_gram, target_feature):
     _, depth, height, width = target_feature.shape
     return layer_weight * torch.mean((target_gram - layer_gram)**2) / (depth * height * width)
 
@@ -126,7 +126,7 @@ def _style_loss(style_weights, target_features, style_grams):
         target_gram = _gram_matrix(target_feature)
         layer_gram = style_grams[layer]
         layer_weight = style_weights[layer]
-        style_loss += _layer_loss(layer_weight, target_gram, layer_gram)
+        style_loss += _layer_loss(layer_weight, target_gram, layer_gram, target_feature)
     return style_loss
 
 def _show_loss(total_loss, i=0, show_loss_every=1):
@@ -142,13 +142,14 @@ style_weight = 1e6  # beta
 vgg = _get_vgg19_features()
 _freeze_vgg_parameters(vgg)
 device = _try_use_gpu_as_torch_device()
+print(device)
 vgg.to(device)
 print(vgg)
 
-content_path = 'https://vignette.wikia.nocookie.net/lovecraft/images/c/cf/Screenshot_20171018-093500.jpg'
+content_path = 'https://i.imgur.com/5Bd61dC.png'
 content = _load_image(content_path).to(device)
 
-style_path = 'https://d3d00swyhr67nd.cloudfront.net/w800h800/collection/SRY/RHU/SRY_RHU_THC0021-001.jpg'
+style_path = 'https://i.imgur.com/iRa27RP.jpg'
 style = _load_image(style_path, shape=content.shape[-2:]).to(device)
 
 target = _get_copy_of_content_image(content, device)
@@ -187,10 +188,13 @@ for i in range(steps):
 
     _update_target_image(optimizer, total_loss)
     _show_loss(total_loss, i+1, show_loss_every)
-_show_loss(total_loss)
+_show_loss(total_loss, steps)
 
 initial_img = _img_from_np_array(_torch_tensor_to_np_image(content))
-initial_img.save("initial_img.png")
+initial_img.save("content_img.png")
 
-final_img = _img_from_np_array(_torch_tensor_to_np_image(target))
-final_img.save("final_img.png")
+style_img = _img_from_np_array(_torch_tensor_to_np_image(style))
+style_img.save("style_img.png")
+
+generated_img = _img_from_np_array(_torch_tensor_to_np_image(target))
+generated_img.save("generated_img.png")
