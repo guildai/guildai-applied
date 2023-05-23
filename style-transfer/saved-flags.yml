@@ -1,0 +1,14 @@
+# Editing flags for style-transfer.py
+
+content_path: https://i.imgur.com/5Bd61dC.png
+content_weight: 1
+conv1_1: '[0.1:1.0]'
+conv2_1: '[0.1:1.0]'
+conv3_1: '[0.1:1.0]'
+conv4_1: '[0.1:1.0]'
+conv5_1: '[0.1:1.0]'
+learning_rate: 0.003
+show_loss_every: 400
+steps: [1000,3000,5000]
+style_path: https://i.imgur.com/iRa27RP.jpg
+style_weight: [1e3,1e6,1e9]
