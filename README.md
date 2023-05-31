@@ -4,6 +4,12 @@
 - Prefer projects that benefit from experimentation and that have
   large, active contribution communities
 
+## Projects
+
+### Style transfer
+
+Source code: [style-transfer](style-transfer)
+
 ## Project candidates
 
 ### ControlNet
