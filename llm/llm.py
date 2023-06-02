@@ -23,28 +23,28 @@ _required("prompt", prompt)
 inputs = tokenizer.encode(prompt, return_tensors='pt')
 _maybe_add(args, "inputs", inputs)
 
-do_sample=True
+do_sample=None
 _maybe_add(args, "do_sample", do_sample)
 
-early_stopping=True
+early_stopping=None
 _maybe_add(args, "early_stopping", early_stopping)
 
 max_length=50
 _maybe_add(args, "max_length", max_length)
 
-no_repeat_ngram_size=2
+no_repeat_ngram_size=None
 _maybe_add(args, "no_repeat_ngram_size", no_repeat_ngram_size)
 
-num_beams=5
+num_beams=None
 _maybe_add(args, "num_beams", num_beams)
 
-num_return_sequences=5
+num_return_sequences=None
 _maybe_add(args, "num_return_sequences", num_return_sequences)
 
-temperature=0.7
+temperature=None
 _maybe_add(args, "temperature", temperature)
 
-top_k=0 # top_k=50
+top_k=None
 _maybe_add(args, "top_k", top_k)
 
 # activate sampling and deactivate top_k by setting top_k sampling to 0
@@ -52,5 +52,11 @@ sample_output = model.generate(**args)
 
 skip_special_tokens=True
 
+output = tokenizer.decode(
+    sample_output[0],
+    skip_special_tokens=skip_special_tokens,
+)
+with open("output.txt", "w") as f:
+    f.write(output)
 print("\nOutput:\n" + 100 * '-')
-print(tokenizer.decode(sample_output[0], skip_special_tokens=skip_special_tokens))
+print(output)
