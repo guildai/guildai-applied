@@ -1,0 +1,26 @@
+- model: llm
+  operations:
+    prepare:
+      main: prepare
+      requires:
+        - lyrics-data.csv
+    train:
+      main: train
+      requires:
+        - prepared
+    generate:
+      main: generate
+      requires:
+        - trained
+    test:
+      main: test
+      requires:
+        - generated
+
+  resources:
+    prepared:
+      - operation: prepare
+    trained:
+      - operation: train
+    generated:
+      - operation: generate
