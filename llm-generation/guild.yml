@@ -3,7 +3,7 @@
     prepare:
       main: prepare
       requires:
-        - lyrics-data.csv
+        - data
     train:
       main: train
       requires:
@@ -18,6 +18,9 @@
         - generated
 
   resources:
+    data:
+      - file: lyrics-data.csv
+      - file: artists-data.csv
     prepared:
       - operation: prepare
     trained:

@@ -1,7 +1,8 @@
 import pandas as pd
 import torch
-from torch.utils.data import Dataset
-from transformers import GPT2Tokenizer
+# from torch.utils.data import Dataset
+# from transformers import GPT2Tokenizer
+from songlyricsdataset import SongLyrics
 
 ### Prepare data
 lyrics = pd.read_csv('lyrics-data.csv')
@@ -34,26 +35,6 @@ end_len = 20
 test_set['True_end_lyrics'] = test_set['Lyric'].str.split().str[-end_len:].apply(' '.join)
 test_set['Lyric'] = test_set['Lyric'].str.split().str[:-end_len].apply(' '.join)
 test_set.to_pickle("test_set.pkl")
-
-class SongLyrics(Dataset):  
-    def __init__(self, control_code, truncate=False, gpt2_type="gpt2", max_length=1024):
-
-        self.tokenizer = GPT2Tokenizer.from_pretrained(gpt2_type)
-        self.lyrics = []
-
-        for row in control_code:
-          self.lyrics.append(torch.tensor(
-                self.tokenizer.encode(f"<|{control_code}|>{row[:max_length]}<|endoftext|>")
-            ))               
-        if truncate:
-            self.lyrics = self.lyrics[:20000]
-        self.lyrics_count = len(self.lyrics)
-        
-    def __len__(self):
-        return self.lyrics_count
-
-    def __getitem__(self, item):
-        return self.lyrics[item]
     
 dataset = SongLyrics(df['Lyric'], truncate=True, gpt2_type="gpt2")
 torch.save(
