@@ -96,7 +96,7 @@ def gradio_fn(
     )
     return generated[0].replace(ending, "")
 
-import gradio as gr
+import app as gr
 
 app = gr.Interface(
     fn=gradio_fn,

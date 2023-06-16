@@ -1,7 +1,7 @@
 import pandas as pd
 import torch
 
-prepare_type = "lyrics"
+prepare_type = "guild-docs"
 if prepare_type == "lyrics":
     from songlyricsdataset import SongLyrics
 
@@ -35,7 +35,6 @@ if prepare_type == "lyrics":
     end_len = 20
     test_set['True_end_lyrics'] = test_set['Lyric'].str.split().str[-end_len:].apply(' '.join)
     test_set['Lyric'] = test_set['Lyric'].str.split().str[:-end_len].apply(' '.join)
-    test_set.to_pickle("test_set.pkl")
         
     dataset = SongLyrics(df['Lyric'], truncate=True, gpt2_type="gpt2")
     torch.save(
@@ -50,11 +49,11 @@ elif prepare_type == "guild-docs":
         for file in files:
             with open(os.path.join(root, file), "r") as f:
                 docs.append(f.read())
-    df = pd.DataFrame()
-    df["docs"] = docs
+    test_set = pd.DataFrame()
+    test_set["docs"] = docs
 
     dataset = GuildDocs(
-        df['docs'],
+        test_set['docs'],
         truncate=True,
         gpt2_type="gpt2",
     )
@@ -62,3 +61,4 @@ elif prepare_type == "guild-docs":
         dataset,
         "guild-docs-dataset.pt",
     )
+test_set.to_pickle("test_set.pkl")

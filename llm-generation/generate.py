@@ -86,7 +86,7 @@ def text_generation(test_data, model, tokenizer):
     return generated_lyrics
 
 #Run the functions to generate the lyrics
-test_set = pd.read_pickle("test_set.pkl")
+test_set = pd.read_pickle(test_set_path)
 tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 state_dict = torch.load(
     os.path.join(output_dir, f"{output_prefix}-final.pt")
