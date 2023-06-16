@@ -1,21 +1,18 @@
-import os
-import pandas as pd
 import torch
 import torch.nn.functional as F
-from tqdm import trange
 from transformers import (
     GPT2LMHeadModel,
     GPT2Tokenizer,
 )
 
 
-entry_count=10
-entry_length=30
+entry_count=1
+entry_length=100 #maximum number of words
 top_p=0.8
 temperature=1.0
-output_dir="."
-output_prefix="wreckgar"
-test_set_path="test_set.pkl"
+prompt="test prompt"
+ending = "<|endoftext|>"
+
 
 def generate(
     model,
@@ -25,6 +22,7 @@ def generate(
     entry_length=30, #maximum number of words
     top_p=0.8,
     temperature=1.,
+    ending="<|endoftext|>",
 ):
     model.eval()
     generated_num = 0
@@ -34,7 +32,7 @@ def generate(
 
     with torch.no_grad():
 
-        for entry_idx in trange(entry_count):
+        for _ in range(entry_count):
 
             entry_finished = False
             generated = torch.tensor(tokenizer.encode(prompt)).unsqueeze(0)
@@ -59,7 +57,7 @@ def generate(
                 next_token = torch.multinomial(F.softmax(logits, dim=-1), num_samples=1)
                 generated = torch.cat((generated, next_token), dim=1)
 
-                if next_token in tokenizer.encode("<|endoftext|>"):
+                if next_token in tokenizer.encode(ending):
                     entry_finished = True
 
                 if entry_finished:
@@ -72,43 +70,43 @@ def generate(
             
             if not entry_finished:
                 output_list = list(generated.squeeze().numpy())
-                output_text = f"{tokenizer.decode(output_list)}<|endoftext|>" 
+                output_text = f"{tokenizer.decode(output_list)}{ending}" 
                 generated_list.append(output_text)
                 
     return generated_list
 
-#Function to generate multiple sentences. Test data should be a dataframe
-def text_generation(test_data, model, tokenizer):
-    generated_lyrics = []
-    for i in range(len(test_data)):
-        x = generate(model.to('cpu'), tokenizer, test_data['Lyric'][i], entry_count=1)
-        generated_lyrics.append(x)
-    return generated_lyrics
 
-#Run the functions to generate the lyrics
-test_set = pd.read_pickle("test_set.pkl")
-tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-state_dict = torch.load(
-    os.path.join(output_dir, f"{output_prefix}-final.pt")
+def gradio_fn(
+    prompt=prompt,
+    entry_length=entry_length,
+    temperature=temperature,
+    top_p=top_p,
+):
+    tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+    model = GPT2LMHeadModel.from_pretrained('gpt2')
+    generated = generate(
+        model.to('cpu'),
+        tokenizer,
+        prompt,
+        entry_count=entry_count,
+        entry_length=entry_length,
+        top_p=top_p,
+        temperature=temperature,
+        ending=ending,
+    )
+    return generated[0].replace(ending, "")
+
+import gradio as gr
+
+app = gr.Interface(
+    fn=gradio_fn,
+    inputs=[
+        gr.TextArea("test prompt"),
+        gr.Slider(1,1024,100,step=1),
+        gr.Slider(0.01,1,1.0,step=0.01),
+        gr.Slider(0.01,1,0.8,step=0.01),
+    ],
+    outputs="text",
 )
-model = GPT2LMHeadModel.from_pretrained(
-    'gpt2',
-    state_dict=state_dict,
-)
 
-generated_lyrics = text_generation(
-   test_set,
-   model,
-   tokenizer,
-)
-
-generations=[]
-lyrics = test_set['Lyric']
-for i in range(len(generated_lyrics)):
-    generated = generated_lyrics[i][0]
-    original = lyrics[i]
-    new = generated[len(original):].split("<")[0].split(".")[0].strip()
-    generations.append(new)
-
-test_set['Generated_lyrics'] = generations
-test_set.to_pickle("generated_set.pkl")
+app.launch()

@@ -1,23 +1,30 @@
-- model: llm
+- model: "llm"
   operations:
     prepare:
       main: prepare
+      flags-import: all
       requires:
         - data
     train:
       main: train
+      flags-import: all
       requires:
         - prepared
     generate:
       main: generate
+      flags-import: all
       requires:
         - trained
+        - prepared # needed for test_set.pkl
     test:
       main: test
+      flags-import: all
       requires:
         - generated
 
   resources:
+    guild-data:
+      - file: guild-docs # how do we do an either/or requirement?
     data:
       - file: lyrics-data.csv
       - file: artists-data.csv

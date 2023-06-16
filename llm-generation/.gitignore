@@ -1,3 +1,5 @@
 *.csv
 *.pt
 *.pkl
+*.pyc
+guild-docs

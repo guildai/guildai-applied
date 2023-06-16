@@ -1,10 +1,12 @@
-import os
+# included to prevent error, need to fix this
 from songlyricsdataset import SongLyrics
+from guilddocsdataset import GuildDocs
+
+import os
 from transformers import (
     AdamW,
     get_linear_schedule_with_warmup,
     GPT2LMHeadModel,
-    GPT2Tokenizer,
 )
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -22,12 +24,6 @@ def pack_tensor(new_tensor, packed_tensor, max_seq_len):
         return packed_tensor, True, None
 
 
-#Get the tokenizer and model
-tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-model = GPT2LMHeadModel.from_pretrained('gpt2')
-dataset = torch.load("lyrics-dataset.pt")
-
-
 batch_size=16
 epochs=5
 lr=2e-5
@@ -35,11 +31,14 @@ max_seq_len=400
 warmup_steps=200
 gpt2_type="gpt2"
 output_dir="."
-output_prefix="wreckgar"
+output_prefix="guilddocs"
 test_mode=False
 save_model_on_epoch=False
-
 acc_steps = 100
+dataset_name = "guild-docs-dataset.pt"
+
+model = GPT2LMHeadModel.from_pretrained('gpt2')
+dataset = torch.load(dataset_name)
 device=torch.device("cuda")
 model = model.cuda()
 model.train()
