@@ -1,5 +1,9 @@
 import transformers
 
+seed = 42
+
+transformers.set_seed(seed)
+
 tokenizer = transformers.GPT2Tokenizer.from_pretrained("gpt2")
 
 # add the EOS token as PAD token to avoid warnings

@@ -1,0 +1,7 @@
+transformers
+torch
+
+# required for notebook support
+notebook
+pandas
+ipywidgets

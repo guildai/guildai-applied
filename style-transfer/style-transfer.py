@@ -25,20 +25,20 @@ def _load_image(img_path, max_size=400, shape=None):
         image = Image.open(BytesIO(response.content)).convert('RGB')
     else:
         image = Image.open(img_path).convert('RGB')
-    
+
     # large images will slow down processing
     if max(image.size) > max_size:
         size = max_size
     else:
         size = max(image.size)
-    
+
     if shape is not None:
         size = shape
 
     in_transform = transforms.Compose([
                         transforms.Resize(size),
                         transforms.ToTensor(),
-                        transforms.Normalize((0.485, 0.456, 0.406), 
+                        transforms.Normalize((0.485, 0.456, 0.406),
                                              (0.229, 0.224, 0.225))])
 
     # discard the alpha channel, add the batch dimension
@@ -47,7 +47,7 @@ def _load_image(img_path, max_size=400, shape=None):
 
 def _torch_tensor_to_np_image(tensor):
     """ Display a tensor as an image. """
-    
+
     image = tensor.to("cpu").clone().detach()
     image = image.numpy().squeeze()
     image = image.transpose(1,2,0)
@@ -66,39 +66,39 @@ def _get_copy_of_content_image(content, device):
     return content.clone().requires_grad_(True).to(device)
 
 def _get_features(image, model, layers=None):
-    """ Run an image forward through a model and get the features for 
+    """ Run an image forward through a model and get the features for
         a set of layers. Default layers are for VGGNet matching Gatys et al (2016)
     """
-    
+
     if layers is None:
         layers = {'0': 'conv1_1',
-                  '5': 'conv2_1', 
-                  '10': 'conv3_1', 
+                  '5': 'conv2_1',
+                  '10': 'conv3_1',
                   '19': 'conv4_1',
                   '21': 'conv4_2',  ## content representation
                   '28': 'conv5_1'}
-        
-        
+
+
     features = {}
     x = image
     for name, layer in model._modules.items():
         x = layer(x)
         if name in layers:
             features[layers[name]] = x
-            
+
     return features
 
 def _gram_matrix(tensor):
-    """ Calculate the Gram Matrix of a given tensor 
+    """ Calculate the Gram Matrix of a given tensor
         Gram Matrix: https://en.wikipedia.org/wiki/Gramian_matrix
     """
-    
+
     _, depth, height, width = tensor.size()
     ## reshape it, so we're multiplying the features for each channel
     tensor = tensor.view(depth, height * width)
-    ## calculate the gram matrix    
+    ## calculate the gram matrix
     gram = torch.mm(tensor, tensor.t())
-    
+
     return gram
 
 def _style_grams(style_features):
@@ -134,7 +134,15 @@ def _show_loss(total_loss, i=0, show_loss_every=1):
     if  i % show_loss_every == 0:
         print(f'step: {i}')
         print(f'loss: {loss}')
-show_loss_every = 400
+
+show_loss_every = 500
+
+def _save_generated(target, i=0, save_generated_every=1, final=False):
+    if final or i % save_generated_every == 0:
+        generated_img = _img_from_np_array(_torch_tensor_to_np_image(target))
+        generated_img.save("generated.png" if final else f"generated-{i}.png")
+
+save_generated_every = 500
 
 content_weight = 1  # alpha
 style_weight = 1e6  # beta
@@ -148,9 +156,13 @@ print(vgg)
 
 content_path = 'https://i.imgur.com/5Bd61dC.png'
 content = _load_image(content_path).to(device)
+content_img = _img_from_np_array(_torch_tensor_to_np_image(content))
+content_img.save("content.png")
 
 style_path = 'https://i.imgur.com/iRa27RP.jpg'
 style = _load_image(style_path, shape=content.shape[-2:]).to(device)
+style_img = _img_from_np_array(_torch_tensor_to_np_image(style))
+style_img.save("style.png")
 
 target = _get_copy_of_content_image(content, device)
 
@@ -188,13 +200,8 @@ for i in range(steps):
 
     _update_target_image(optimizer, total_loss)
     _show_loss(total_loss, i+1, show_loss_every)
+    _save_generated(target, i+1, save_generated_every)
+
+
 _show_loss(total_loss, steps)
-
-initial_img = _img_from_np_array(_torch_tensor_to_np_image(content))
-initial_img.save("content_img.png")
-
-style_img = _img_from_np_array(_torch_tensor_to_np_image(style))
-style_img.save("style_img.png")
-
-generated_img = _img_from_np_array(_torch_tensor_to_np_image(target))
-generated_img.save("generated_img.png")
+_save_generated(target, final=True)
